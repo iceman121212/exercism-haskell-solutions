@@ -1,0 +1,125 @@
+module Gigasecond (fromDay) where
+
+import Data.Time.Calendar
+
+--toggle
+fromDay :: Day -> Day
+fromDay = fromDay2
+          
+
+----------------------------------------------------------------------------------------------------
+--the easy version, i.e., using addDays function from Data.Time.Calendar
+fromDay1 :: Day -> Day
+fromDay1 birthday = addDays numDaysInGigasecond birthday
+  where numDaysInGigasecond = 10^(9::Int) `div` (60*60*24)
+----------------------------------------------------------------------------------------------------        
+--the hard version, i.e., without using any functions from Data.Time.Calendar (except for
+--fromGregorian and toGregorian)
+fromDay2 :: Day -> Day
+fromDay2 birthday = rollForward startingSeconds $ toGregorian birthday
+
+startingSeconds :: Int
+startingSeconds = 10^9
+
+--at the moment, the `roll-forward` function (which does the heavy-lifting)
+--is aesthetically a mess so here's a quick summary of the logic.  effectively, we
+--can think about two parts.
+
+--Part 1:
+--we start off the process by adjusting forward to January 01 of the next year (i.e., relative
+--to the year provided in the argument).  why?  it's a lot easier to step from
+--the 1st day of a given month to the 1st day of the following month (rather than jumping
+--from mid-month to mid-month).
+
+--note that we only need to adjust to January 01 once.  the logic of Part 1 is captured
+--in the first guard (of the recursive `roll-forward`  function below).
+
+--after making this one-time adjustment, we continue with our two new
+--parameters (i.e., (i) the the remaining number of seconds to complete a gigasecond and
+--(ii) the new date of Jan 01 of the following year) by recursively calling
+--this function
+
+--Part 2:
+--after the one-time adjustment in Part 1:
+--(i) we move forward one year at a time via recursive calls; each time
+--we move forward by a year, we deduct one year worth of seconds from the
+--`totalSeconds` variable, which represents the number of seconds remaining
+--before we hit the gigasecond mark.
+
+--(ii) eventually, the remaining number of seconds to complete
+--a gigasecond will value of `totalSeconds` will fall below one year.
+--at this point we start moving forward one month at a time.
+
+--(iii) and, similarly, when `totalSeconds` falls below the number of
+--seconds in the next month (because of the work done by Part 1, we've simply
+--been jumping from the first day of one month to the first day of the following
+--month).  we keep going until we `totalSeconds` falls below the number of seconds
+--in a day...at which point we're done!  (technically we have some seconds left
+--over but the problem only requires accuracy to the day.)
+
+--the logic of part 2 is captured in the remaining three guards of the
+--`rollForward` function.
+                  
+rollForward :: Int -> (Integer, Int, Int) -> Day
+rollForward totalSeconds (year, month, day)
+  | (totalSeconds > secondsInCurrentYear) && (month /= 1) && (day /= 1) =
+      rollForward (totalSeconds - secondsToStartOfNextYear) (year + 1, 1, 1)
+  | totalSeconds > secondsInCurrentYear =
+      rollForward (totalSeconds - secondsInCurrentYear) (upOneYear (year, month, day))
+  | totalSeconds > secondsInCurrentMonth =
+      rollForward (totalSeconds - secondsInCurrentMonth) (upOneMonth(year, month, day))
+  | totalSeconds > numSecondsPerDay =
+      rollForward (totalSeconds - numSecondsPerDay) (upOneDay(year, month, day))
+  | otherwise = fromGregorian year month day
+  where
+    secondsToStartOfNextYear = secondsRemainingInMonth + secondsRemainingInRemainingMonths
+    secondsRemainingInMonth = (*numSecondsPerDay) $ (daysInCurrentMonth - day + 1)
+    secondsRemainingInRemainingMonths = (*numSecondsPerDay) $ if (isLeap year) then
+                                                                sum $ drop month numDaysPerMonth_Leap
+                                                              else
+                                                                sum $ drop month numDaysPerMonth_NonLeap
+    numDaysPerMonth = if (isLeap year) then numDaysPerMonth_Leap else numDaysPerMonth_NonLeap                           
+    daysInCurrentMonth = if (isLeap year && month == 2) then
+                           numDaysPerMonth_NonLeap !! (month - 1)
+                         else
+                           numDaysPerMonth_Leap !! (month - 1)
+    secondsInCurrentYear = if isLeap year then
+                                 numSecondsPerLeapYear
+                               else
+                                 numSecondsPerNonLeapYear
+    secondsInCurrentMonth = if (isLeap year && month == 2) then
+                              numSecondsPerMonth_Leap !! (month - 1)
+                            else
+                              numSecondsPerMonth_NonLeap !! (month - 1)
+    upOneYear (y,m,d) = (y+1,m,d)
+    upOneMonth (y,m,d) = if (m == 11) then
+                           (y+1,1,1)
+                         else
+                           (y,m+1,1)
+    upOneDay (y,m,d) = if d == numDaysPerMonth !! (m-1) then
+                         if (m == 1) then
+                           (y+1,1,1)
+                         else
+                           (y,m+1,1)
+                       else
+                         (y,m,d+1)
+
+numHoursPerDay    = 24
+numMinutesPerHour = 60
+numSecondsPerHour = 60
+numSecondsPerDay  = numHoursPerDay * numMinutesPerHour * numSecondsPerHour
+numDaysPerNonLeapYear    = 365
+numDaysPerLeapYear = 366
+numSecondsPerNonLeapYear = numDaysPerNonLeapYear * numSecondsPerDay
+numSecondsPerLeapYear = numDaysPerLeapYear * numSecondsPerDay
+numDaysPerMonth_NonLeap = [31,28,31,30,31,30,31,31,30,31,30,31]
+numDaysPerMonth_Leap = [31,29,31,30,31,30,31,31,30,31,30,31]
+numSecondsPerMonth_NonLeap = map (*numSecondsPerDay) numDaysPerMonth_NonLeap
+numSecondsPerMonth_Leap = map (*numSecondsPerDay) numDaysPerMonth_NonLeap
+
+isLeap :: Integer -> Bool
+isLeap n
+  | (n `rem` 100) == 0 && ( n `rem` 400) /= 0 = False
+  | n `rem` 4 == 0 = True
+  | otherwise = False
+                
