@@ -16,6 +16,10 @@ mkRobot = return (Robot mkRobotName)
 robotName :: Robot -> IO String
 robotName (Robot name) = name
                                       
+--the mass of code below is used to randomly generate names; it's probably
+--possible to do it in way fewer lines.  but the crux of the main problem lies
+--with the three functions
+
 mkRobotName :: IO String
 mkRobotName = getRandLetter >>=
               \l1 -> getRandLetter >>=
