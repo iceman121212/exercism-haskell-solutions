@@ -5,20 +5,18 @@ module Robot (robotName, mkRobot, resetName) where
 import Data.Map (fromList, findWithDefault)
 import System.Random (Random, randomRIO)
 import Control.Monad (replicateM)
-import Data.IORef (IORef, newIORef, modifyIORef, readIORef)
 
-newtype Robot = Robot { name :: String }
+data Robot = Robot (IO String)
 
-mkRobot :: IO (IORef Robot)
-mkRobot = mkRobotName >>= return . Robot >>= newIORef
+resetName :: Robot -> IO String
+resetName (Robot _) = mkRobotName >>= \name -> return name
+             
+mkRobot :: IO Robot
+mkRobot = mkRobotName >>= \name -> return (Robot (return name))
 
-robotName :: IORef Robot -> IO String
-robotName rr = readIORef rr >>= return . name
-
-resetName :: IORef Robot -> IO ()
-resetName rr = mkRobotName >>=
-               \newName -> modifyIORef rr (\r -> r {name = newName})
-
+robotName :: Robot -> IO String
+robotName (Robot name) = name
+                         
 mkRobotName :: IO String
 mkRobotName = replicateM 2 getRandLetter >>=
               \l -> replicateM 3 getRandNumber >>=
